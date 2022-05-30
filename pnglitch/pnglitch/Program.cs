@@ -59,6 +59,9 @@ namespace pnglitch
         public byte[] Data;
         public UInt32 Crc;
 
+        public byte[] DecompressedData;
+        public bool Dirty = false;
+
         public void Parse()
         {
 
@@ -67,6 +70,15 @@ namespace pnglitch
         public void Dump()
         {
             Console.WriteLine("Type: {0}, Len: {1}, crc: {2}", Type, Length, Crc);
+            string val = "";
+            if (Data == null)
+                return;
+            //foreach (var b in Data)
+            //{
+            //    Console.Write(b.ToString("X") + " ");
+            //}
+            //Console.WriteLine();
+
         }
     }
 
@@ -95,6 +107,9 @@ namespace pnglitch
             PNG image = new PNG();
             PNGHeader header = new PNGHeader();
 
+            List<byte> compressedData = new List<byte>();
+            List<byte> uncompressedData = new List<byte>();
+
             using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read))
             using (BinaryReader reader = new BinaryReader(stream))
             {
@@ -118,6 +133,24 @@ namespace pnglitch
                     else
                     {
                         currentChunk.Data = reader.ReadBytes((int)currentChunk.Length);
+                        compressedData.AddRange(currentChunk.Data);
+                        //currentChunk.Data = currentChunk.Data.Reverse().ToArray();
+                        
+                        //using (MemoryStream destination = new MemoryStream())
+                        //using (MemoryStream ms = new MemoryStream(currentChunk.Data))
+                        //using (DeflateStream ds = new DeflateStream(destination, CompressionLevel.Optimal))
+                        //{
+                        //    ds.Write(currentChunk.Data, 0, (int)currentChunk.Length);
+                        //    //ds.CopyTo(destination);
+                        //    currentChunk.DecompressedData = destination.ToArray();
+                        //}
+                        //using (MemoryStream destination = new MemoryStream())
+                        //using (MemoryStream data = new MemoryStream(currentChunk.Data))
+                        //using (DeflateStream ds = new DeflateStream(data, CompressionMode.Decompress))
+                        //{
+                        //    ds.CopyTo(destination);
+                        //    currentChunk.DecompressedData = destination.ToArray();
+                        //}
                     }
                     currentChunk.Crc = reader.ReadUInt32();
                     currentChunk.Dump();
@@ -126,6 +159,23 @@ namespace pnglitch
 
                     //Console.WriteLine("{0}/{1}", stream.Position, stream.Length);
                 }
+
+                using (MemoryStream destination = new MemoryStream())
+                using (MemoryStream ms = new MemoryStream(compressedData.ToArray()))
+                {
+                    // Read past the first two bytes of the zlib header
+                    // System.IO.Compression doesn't recognise the first 2 bytes of the data
+                    //https://stackoverflow.com/a/21544269
+                    ms.Seek(2, SeekOrigin.Begin);
+
+                    using (DeflateStream ds = new DeflateStream(ms, CompressionMode.Decompress))
+                    {
+                        ds.CopyTo(destination);
+                        uncompressedData.AddRange(destination.ToArray());
+                    }
+                }
+
+
                 Console.ReadLine();
             }
         }
