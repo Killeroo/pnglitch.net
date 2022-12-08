@@ -6,9 +6,12 @@ using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO.Compression;
+using System.IO.Hashing;
 
 namespace pnglitch
 {
+
+
     class PNGHeader
     {
         public uint Width;
@@ -18,6 +21,9 @@ namespace pnglitch
         public byte CompressionMethod;
         public byte FilterMethod;
         public byte InterlaceMethod;
+
+        // TODO: Now technically part of header
+        public byte SampleSize;
 
         public void Parse(byte[] data)
         {
@@ -35,6 +41,16 @@ namespace pnglitch
             CompressionMethod = data[10];
             FilterMethod = data[11];
             InterlaceMethod = data[12];
+
+            // TODO: Switch to fancy array
+            switch (ColorType)
+            {
+                case 0: SampleSize = 1; break;
+                case 2: SampleSize = 3; break;
+                case 3: SampleSize = 1; break;
+                case 4: SampleSize = 2; break;
+                case 6: SampleSize = 4; break;
+            }
         }
 
         public void Dump()
@@ -69,7 +85,7 @@ namespace pnglitch
 
         public void Dump()
         {
-            Console.WriteLine("Type: {0}, Len: {1}, crc: {2}", Type, Length, Crc);
+            Console.WriteLine("Type: {0}, Len: {1}, crc: {2}", Type, Length, Crc.ToString("X"));
             string val = "";
             if (Data == null)
                 return;
@@ -160,6 +176,8 @@ namespace pnglitch
                     //Console.WriteLine("{0}/{1}", stream.Position, stream.Length);
                 }
 
+                uint expectedSize = (1 + header.Width * header.SampleSize) * header.Height;
+
                 using (MemoryStream destination = new MemoryStream())
                 using (MemoryStream ms = new MemoryStream(compressedData.ToArray()))
                 {
@@ -174,6 +192,10 @@ namespace pnglitch
                         uncompressedData.AddRange(destination.ToArray());
                     }
                 }
+                Debug.Assert(uncompressedData.Count == expectedSize);
+
+                // Great we can apparently decompress, lets try compressing again...
+                Crc32 crc = new Crc32();
 
 
                 Console.ReadLine();
