@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using System.IO.Compression;
 using System.IO.Hashing;
 
+using PeterO;
+
 namespace pnglitch
 {
 
@@ -119,6 +121,16 @@ namespace pnglitch
     {
         static void Main(string[] args)
         {
+
+
+
+            Png png = new Png(1000, 1000);
+
+            png.Save("Test.png");
+            //Console.ReadLine();
+
+
+
             string path = "image.png";
             PNG image = new PNG();
             PNGHeader header = new PNGHeader();
@@ -218,7 +230,7 @@ namespace pnglitch
                 using (MemoryStream destination = new MemoryStream())
                 using (MemoryStream d = new MemoryStream())
                 //using (MemoryStream ms = new MemoryStream(uncompressedData.ToArray()))
-                using (DeflateStream ds = new DeflateStream(d, CompressionLevel.Fastest, true))
+                using (DeflateStream ds = new DeflateStream(d, CompressionMode.Compress, true))
                 //using (DeflateStream ds = new DeflateStream(d, CompressionMode.Compress, true))
                 {
                     ds.Write(uncompressedData.ToArray(), 0, uncompressedData.Count);
@@ -243,6 +255,11 @@ namespace pnglitch
 
                     var newCompressedData = d.ToArray();
                     int count = 0;
+                    //for (int i = newCompressedData.Length; i > newCompressedData.Length - 10; i--)
+                    //{
+                    //    Console.Write("{0} ", newCompressedData[i-1].ToString("X"));
+                    //}
+                    //Console.WriteLine();
                     foreach (byte data in newCompressedData)
                     {
                         if (count > 10) break;
@@ -307,5 +324,8 @@ namespace pnglitch
 
             return c ^ 0xffffffff;
         }
+
+        // I'm curious how this crc implementation compares when ported
+        //https://www.w3.org/TR/PNG-CRCAppendix.html
     }
 }
