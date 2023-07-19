@@ -70,6 +70,8 @@ namespace PeterO
 					crcTable[n] = c;
 				}
 			}
+
+
 			c = crc ^ 0xffffffff;
 			var endOffset = offset + length;
 			for (var i = offset; i < endOffset; i++)
@@ -184,37 +186,63 @@ namespace PeterO
 		{
 			using (FileStream fs = new FileStream(filename, FileMode.Create))
 			{
-				fs.Write(this.subdata1, 0, this.subdata1.Length);
-				uint crc32 = Crc32(subdata1, 12, 17, 0);
+
+
+				// Compress image data
 				byte[] deflated = null;
-				fs.Write(GetBE(crc32), 0, 4);
 				using (MemoryStream ms = new MemoryStream())
 				{
 					// PNG compression uses a ZLIB stream not a DEFLATE stream
+
+					// Write Deflate signature
 					ms.WriteByte(0x78);
 					ms.WriteByte(0x9c);
+
+					// Write compressed data
 					using (DeflateStream ds = new DeflateStream(ms,
 															 CompressionMode.Compress, true))
 					{
 						ds.Write(this.data, 0, this.data.Length);
 					}
+					// zlib checksum of the uncompressed data (used to confirm decompression)
 					ms.Write(Adler32(this.data, 0, this.data.Length), 0, 4);
 					deflated = ms.ToArray();
 				}
+				// Big edian length
 				byte[] defLength = new byte[]{
 					(byte)((deflated.Length>>24)&255),
 					(byte)((deflated.Length>>16)&255),
 					(byte)((deflated.Length>>8)&255),
 					(byte)((deflated.Length>>0)&255)
 				};
+
+				// ----- Write File signature + header chunk 
+				fs.Write(this.subdata1, 0, this.subdata1.Length);
+				uint crc32 = Crc32(subdata1, 12, 17, 0);
+				fs.Write(GetBE(crc32), 0, 4);
+
+
+				// ---- Write data chunk
+
+				// Length
 				fs.Write(defLength, 0, defLength.Length);
+
+				// Type
 				fs.Write(new byte[]{
 							 0x49,0x44,0x41,0x54
 						 }, 0, 4);
+
+
+				// Data
 				fs.Write(deflated, 0, deflated.Length);
 				uint crc = Crc32(deflated, 0, deflated.Length, this.idatCrc);
 				byte[] subdcrc = GetBE(crc);
+
+				// CRC
 				fs.Write(subdcrc, 0, subdcrc.Length);
+
+
+				// ---- Write end chunk
 				fs.Write(subdata2, 0, subdata2.Length);
 			}
 		}
@@ -241,13 +269,63 @@ namespace PeterO
 				throw new ArgumentOutOfRangeException("width");
 			if (height > 65535 || height <= 0)
 				throw new ArgumentOutOfRangeException("height");
-			subdata1 = new byte[]{
-				0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0,0,0,0xd,
-				0x49,0x48,0x44,0x52,
-				0,0,(byte)(width>>8),(byte)(width&255),
-				0,0,(byte)(height>>8),(byte)(height&255),
-				8,(byte)((BytesPerPixel==4) ? 6 : 2),0,0,0
+
+
+			// Hardcoded PNG file start
+			// Signature + Header chunk
+			subdata1 = new byte[]{ 
+
+				// ------- File signature
+				0x89, // - (High bit)
+				0x50, // P
+				0x4e, // N
+				0x47, // G
+				0x0d, // CR (Carrige return DOS)
+				0x0a, // LF (Carrige return DOS)
+				0x1a, // - (do not display bit
+				0x0a, // LF (Line ending Linus 
+
+
+				// ------- 1st chunk (header)
+				
+				// == Length (13)
+				// (4 bytes - big edian)
+				0,
+				0,
+				0,
+				0xd,
+				
+				// == Type (iHDR)
+				// (4 bytes, case sensitive ascii)
+				0x49,
+				0x48,
+				0x44,
+				0x52,
+
+				// == Chunk data (Header)
+				// (13 bytes)
+
+				// Width
+				0,
+				0,
+				(byte)(width>>8),
+				(byte)(width&255),
+
+				// Height
+				0,
+				0,
+				(byte)(height>>8),
+				(byte)(height&255),
+
+
+				8,
+				(byte)((BytesPerPixel==4) ? 6 : 2),
+				0,
+				0,
+				0
 			};
+
+
 			this.width = width;
 			this.height = height;
 			this.realRowSize = (this.width * BytesPerPixel) + 1;
@@ -259,8 +337,28 @@ namespace PeterO
 				new byte[]{
 					0x49,0x44,0x41,0x54
 				}, 0, 4, 0);
+
+
+			// Hardcoded end chunk
 			subdata2 = new byte[]{
-				0,0,0,0,0x49,0x45,0x4e,0x44,0xae,0x42,0x60,0x82
+				
+				// Length
+				0,
+				0,
+				0,
+				0,
+
+				// Type (IEND)
+				0x49,
+				0x45,
+				0x4e,
+				0x44,
+				
+				// Crc
+				0xae,
+				0x42,
+				0x60,
+				0x82
 			};
 		}
 	}

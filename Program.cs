@@ -6,7 +6,6 @@ using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO.Compression;
-using System.IO.Hashing;
 
 using PeterO;
 
@@ -27,7 +26,10 @@ namespace pnglitch
         // TODO: Now technically part of header
         public byte SampleSize;
 
-        public void Parse(byte[] data)
+        // TEMP
+        public byte[] RawBytes;
+
+        public void Parse(byte[] data) // TODO: Add an offset and stuff 
         {
             //Debug.Assert(data.Length != 13);
 
@@ -53,6 +55,9 @@ namespace pnglitch
                 case 4: SampleSize = 2; break;
                 case 6: SampleSize = 4; break;
             }
+
+            RawBytes = new byte[13];
+            Array.Copy(data, 0, RawBytes, 0, 13);
         }
 
         public void Dump()
@@ -67,6 +72,15 @@ namespace pnglitch
                 CompressionMethod,
                 FilterMethod,
                 InterlaceMethod);
+        }
+
+        public void DumpRaw()
+        {
+            foreach (byte data in RawBytes)
+            {
+                Console.Write("{0} ", data.ToString("X2"));
+            }
+            Console.WriteLine();
         }
     }
 
@@ -102,7 +116,7 @@ namespace pnglitch
 
     class PNG
     {
-        public byte[] HeaderData = new byte[8];
+        public byte[] FileSignature = new byte[8];
         public List<Chunk> Chunks = new List<Chunk>();
     }
 
@@ -142,7 +156,7 @@ namespace pnglitch
             using (BinaryReader reader = new BinaryReader(stream))
             {
                 stream.Seek(0, SeekOrigin.Begin);
-                image.HeaderData = reader.ReadBytes(8);
+                image.FileSignature = reader.ReadBytes(8);
 
                 while (stream.Position != stream.Length)
                 {
@@ -162,6 +176,7 @@ namespace pnglitch
                         byte[] headerData = reader.ReadBytes((int)currentChunk.Length);
                         header.Parse(headerData);
                         header.Dump();
+                        header.DumpRaw();
 
                     }
                     else
@@ -224,67 +239,217 @@ namespace pnglitch
                     }
                 }
                 Debug.Assert(uncompressedData.Count == expectedSize);
+                byte[] decompressedData = uncompressedData.ToArray();
 
                 // Great we can apparently decompress, lets try compressing again...
-                //Crc32 crc = new Crc32();
-                using (MemoryStream destination = new MemoryStream())
-                using (MemoryStream d = new MemoryStream())
-                //using (MemoryStream ms = new MemoryStream(uncompressedData.ToArray()))
-                using (DeflateStream ds = new DeflateStream(d, CompressionMode.Compress, true))
-                //using (DeflateStream ds = new DeflateStream(d, CompressionMode.Compress, true))
+
+                byte[] recompressedData;
+                using (MemoryStream ms = new MemoryStream())
                 {
-                    ds.Write(uncompressedData.ToArray(), 0, uncompressedData.Count);
-                    //ds.CopyTo(destination);
-                    //ds.CopyTo(d);
+                    // Write deflate signature
+                    ms.WriteByte(0x78);
+                    ms.WriteByte(0x9c);
 
-                    ds.Close();
-
-                    //////////////////////////////////////////////////////////////////////////////////////
-                    // TODO: Now we havbe CRC and deflate maybe working do this next
-                    //////////////////////////////////////////////////////////////////////////////////////
-
-                    // 1. Put compressed data into an IDAT chunk (remember to decorate the deflate data) CRC the chunk
-                    // 2. Add a header and chunk end
-                    // 3. see if it opens
-
-                    //https://github.dev/codebude/QRCoder/blob/master/QRCoder/PngByteQRCode.cs
-                    // https://github.dev/EliotJones/BigGustave
-
-                    Console.WriteLine(compressedData.Count);
-                    Console.WriteLine(d.Length);
-
-                    var newCompressedData = d.ToArray();
-                    int count = 0;
-                    //for (int i = newCompressedData.Length; i > newCompressedData.Length - 10; i--)
-                    //{
-                    //    Console.Write("{0} ", newCompressedData[i-1].ToString("X"));
-                    //}
-                    //Console.WriteLine();
-                    foreach (byte data in newCompressedData)
+                    // Compress the data using deflate
+                    using (DeflateStream ds = new DeflateStream(ms, CompressionMode.Compress, true))
                     {
-                        if (count > 10) break;
-                        Console.Write("{0} ", data.ToString("X"));
-                        count++;
+                        ds.Write(decompressedData, 0, decompressedData.Length);
                     }
 
-                    Console.WriteLine();
-                    Console.WriteLine("-------------------------------");
-                    Console.WriteLine();
+                    // Write the checksum of the uncompressed data for zlib to verify decomp
+                    ms.Write(Adler32_(decompressedData, 0, decompressedData.Length), 0, 4);
 
-                    count = 0;
-                    foreach (byte data in compressedData)
-                    {
-                        if (count > 10) break;
-                        Console.Write("{0} ", data.ToString("X"));
-                        count++;
-                    }
+                    // Save it
+                    recompressedData = ms.ToArray();
                 }
+                
+                for (int i = 0; i < 20; i++)
+                {
+                    Console.Write("{0}-{1} ", compressedData[i].ToString("X2"), recompressedData[i].ToString("X2"));
+                }
+
+
+                // Save the file again I guess
+                using (FileStream outputFile = new FileStream("Output.png", FileMode.Create))
+                {
+                    // Write out signature again
+                    outputFile.Write(image.FileSignature, 0, image.FileSignature.Length);
+
+                    // Write out header chunk 
+                    byte[] headerData = new byte[] {
+                        0,
+                        0,
+                        0,
+                        0xd,
+                        0x49,
+                        0x48,
+                        0x44,
+                        0x52};
+                    outputFile.Write(headerData, 0, headerData.Length);
+                    outputFile.Write(header.RawBytes, 0, 13);
+                    {
+                        uint crc = Crc32(header.RawBytes, 0, header.RawBytes.Length);
+                        byte[] beCrc = new byte[]{
+                    (byte)((crc>>24)&255),
+                    (byte)((crc>>16)&255),
+                    (byte)((crc>>8)&255),
+                    (byte)((crc>>0)&255)};
+                        outputFile.Write(beCrc, 0, 4);
+                    }
+
+
+                    byte[] defLength = new byte[]{
+                    (byte)((recompressedData.Length>>24)&255),
+                    (byte)((recompressedData.Length>>16)&255),
+                    (byte)((recompressedData.Length>>8)&255),
+                    (byte)((recompressedData.Length>>0)&255)};
+
+                    // Length
+                    outputFile.Write(defLength, 0, defLength.Length);
+
+                    // Type
+                    outputFile.Write(new byte[]{
+                             0x49,0x44,0x41,0x54
+                         }, 0, 4);
+
+                    // Data
+                    outputFile.Write(recompressedData, 0, recompressedData.Length);
+
+                    // Crc
+                    {
+                        uint crc = Crc32(recompressedData, 0, recompressedData.Length);
+                        byte[] beCrc = new byte[]{
+                    (byte)((crc>>24)&255),
+                    (byte)((crc>>16)&255),
+                    (byte)((crc>>8)&255),
+                    (byte)((crc>>0)&255)};
+                        outputFile.Write(beCrc, 0, 4);
+                    }
+
+
+
+                    // Write end chunk
+
+                    byte[] subdata2 = new byte[]{
+				
+				// Length
+				0,
+                0,
+                0,
+                0,
+
+				// Type (IEND)
+				0x49,
+                0x45,
+                0x4e,
+                0x44,
+				
+				// Crc
+				0xae,
+                0x42,
+                0x60,
+                0x82
+            };
+
+
+                    // ---- Write end chunk
+                    outputFile.Write(subdata2, 0, subdata2.Length);
+
+                }
+
+                
+                //Crc32 crc = new Crc32();
+                //using (MemoryStream destination = new MemoryStream())
+                //using (MemoryStream d = new MemoryStream())
+                ////using (MemoryStream ms = new MemoryStream(uncompressedData.ToArray()))
+                //using (DeflateStream ds = new DeflateStream(d, CompressionMode.Compress, true))
+                ////using (DeflateStream ds = new DeflateStream(d, CompressionMode.Compress, true))
+                //{
+                //    ds.Write(uncompressedData.ToArray(), 0, uncompressedData.Count);
+                //    //ds.CopyTo(destination);
+                //    //ds.CopyTo(d);
+
+                //    ds.Close();
+
+                //    //////////////////////////////////////////////////////////////////////////////////////
+                //    // TODO: Now we havbe CRC and deflate maybe working do this next
+                //    //////////////////////////////////////////////////////////////////////////////////////
+
+                //    // 1. Put compressed data into an IDAT chunk (remember to decorate the deflate data) CRC the chunk
+                //    // 2. Add a header and chunk end
+                //    // 3. see if it opens
+
+                //    //https://github.dev/codebude/QRCoder/blob/master/QRCoder/PngByteQRCode.cs
+                //    // https://github.dev/EliotJones/BigGustave
+
+                //    Console.WriteLine(compressedData.Count);
+                //    Console.WriteLine(d.Length);
+
+                //    var newCompressedData = d.ToArray();
+                //    int count = 0;
+                //    //for (int i = newCompressedData.Length; i > newCompressedData.Length - 10; i--)
+                //    //{
+                //    //    Console.Write("{0} ", newCompressedData[i-1].ToString("X"));
+                //    //}
+                //    //Console.WriteLine();
+                //    foreach (byte data in newCompressedData)
+                //    {
+                //        if (count > 10) break;
+                //        Console.Write("{0} ", data.ToString("X"));
+                //        count++;
+                //    }
+
+                //    Console.WriteLine();
+                //    Console.WriteLine("-------------------------------");
+                //    Console.WriteLine();
+
+                //    count = 0;
+                //    foreach (byte data in compressedData)
+                //    {
+                //        if (count > 10) break;
+                //        Console.Write("{0} ", data.ToString("X"));
+                //        count++;
+                //    }
+                //}
 
 
                 Console.ReadLine();
             }
 
 
+        }
+
+        // TODO: Compare the 2 adler implementations
+        private static byte[] Adler32_(byte[] stream, int offset,
+                       int length)
+        {
+            var adler = 1;
+            var len = length;
+            var NMAX = 3854;
+            var BASE = 65521;
+            var s1 = adler & 0xffff;
+            var s2 = ((adler & 0xffff0000) >> 16) & 0xFFFF;
+            var k = 0;
+            var bpos = offset;
+            while (len > 0)
+            {
+                k = len < NMAX ? len : NMAX;
+                len -= k;
+                while (k > 0)
+                {
+                    s1 = unchecked((int)s1 + stream[bpos]);
+                    s2 = unchecked((int)s2 + s1);
+                    bpos += 1;
+                    k -= 1;
+                }
+                s1 = s1 % BASE;
+                s2 = s2 % BASE;
+            }
+            return new byte[]{(byte)(s2>>8),
+                (byte)(s2&255),
+                (byte)(s1>>8),
+                (byte)(s1&255)
+            };
         }
 
         // Reference implementation from RFC 1950. Not optimized.
