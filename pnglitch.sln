@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.31402.337
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pnglitch", "pnglitch\pnglitch.csproj", "{E982B012-C9F2-4DBC-99FB-A6C307AE311C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "pnglitch", "pnglitch.csproj", "{E982B012-C9F2-4DBC-99FB-A6C307AE311C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
