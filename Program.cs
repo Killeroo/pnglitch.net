@@ -84,7 +84,7 @@ namespace pnglitch
         }
     }
 
-    class Chunk
+    class Chunk_
     {
         public string Type;
         public UInt32 Length;
@@ -117,7 +117,7 @@ namespace pnglitch
     class PNG
     {
         public byte[] FileSignature = new byte[8];
-        public List<Chunk> Chunks = new List<Chunk>();
+        public List<Chunk_> Chunks = new List<Chunk_>();
     }
 
     public static class LittleEndianConverter
@@ -138,7 +138,7 @@ namespace pnglitch
 
 
 
-            Png png = new Png(1000, 1000);
+            PeterO.Png png = new PeterO.Png(1000, 1000);
 
             png.Save("Test.png");
             //Console.ReadLine();
@@ -160,7 +160,7 @@ namespace pnglitch
 
                 while (stream.Position != stream.Length)
                 {
-                    Chunk currentChunk = new Chunk();
+                    Chunk_ currentChunk = new Chunk_();
 
                     List<byte> crc_data = new List<byte>();
 
