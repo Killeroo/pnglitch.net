@@ -2,12 +2,17 @@
 using System.IO;
 using System.Diagnostics;
 using System.Text;
+using System.Collections.Generic;
 
 namespace pnglitch
 {
 
     public class Chunk
     {
+        public const string HEADER_TYPE = "IHDR";
+        public const string DATA_TYPE = "IDAT";
+        public const string END_TYPE = "IEND";
+
         public uint Length { get; private set; }
         public string Type { get; private set; }
         public byte[] Data { get; private set; }
@@ -16,6 +21,11 @@ namespace pnglitch
         public Chunk(BinaryReader data)
         {
             FromBytes(data);
+        }
+
+        public string GetType(byte[] chunkData)
+        {
+            return Encoding.ASCII.GetString(chunkData, 4, 4);
         }
 
         public virtual void FromBytes(BinaryReader data)
@@ -29,14 +39,19 @@ namespace pnglitch
         public virtual byte[] ToBytes()
         {
             Length = (uint) Data.Length;
-            Crc = Checksums.Crc32(Data, 0, Data.Length);
 
+            // Calculate checksum using chunk type and data
+            List<byte> checksumData = new List<byte>();
+            checksumData.AddRange(Encoding.ASCII.GetBytes(Type));
+            checksumData.AddRange(Data);
+            Crc = Checksums.Crc32(checksumData.ToArray(), 0, Data.Length);
+
+            // Write chunk data to array
             using (MemoryStream outputStream = new MemoryStream())
             using (BinaryWriter writer = new BinaryWriter(outputStream))
             {
                 writer.Write(Utils.ToBigEndianBytes(Length));
-                writer.Write(Encoding.ASCII.GetBytes(Type));
-                writer.Write(Data);
+                writer.Write(checksumData.ToArray());
                 writer.Write(Crc);
             }
 
@@ -45,25 +60,28 @@ namespace pnglitch
 
         public virtual void Dump()
         {
-            Console.WriteLine("BaseChunk: Type: {0}, Len: {1}, crc: {2}", Type, Length, Crc.ToString("X"));
+            Console.WriteLine("Chunk: Type: {0}, Len: {1}, crc: {2}", Type, Length, Crc.ToString("X"));
         }
 
     }
 
-    public class DataChunk : Chunk
-    {
-        public byte[] CompressedData;
-        public byte[] FilteredData;
+    //public class DataChunk : Chunk
+    //{
+    //    public byte[] CompressedData;
+    //    public byte[] FilteredData;
 
-        public DataChunk(BinaryReader stream) : base(stream) { }
+    //    public DataChunk(BinaryReader stream) : base(stream) { }
 
-        public override void FromBytes(BinaryReader data)
-        {
-            base.FromBytes(data);
+    //    public override void FromBytes(BinaryReader data)
+    //    {
+    //        base.FromBytes(data);
+    //    }
 
-
-        }
-    }
+    //    public override byte[] ToBytes()
+    //    {
+    //        return base.ToBytes();
+    //    }
+    //}
 
     public class HeaderChunk : Chunk
     {
@@ -101,7 +119,19 @@ namespace pnglitch
 
         public override byte[] ToBytes()
         {
-            // TODO: I was here doing things
+            // Write header to chunk data
+            using (MemoryStream stream = new MemoryStream(this.Data))
+            using (BinaryWriter writer = new BinaryWriter(stream))
+            {
+                writer.Write(Utils.ToBigEndianBytes(Width));
+                writer.Write(Utils.ToBigEndianBytes(Height));
+                writer.Write(BitDepth);
+                writer.Write(ColorType);
+                writer.Write(CompressionMethod);
+                writer.Write(FilterMethod);
+                writer.Write(InterlaceMethod);
+            }
+
             return base.ToBytes();
         }
 
@@ -121,4 +151,9 @@ namespace pnglitch
                 InterlaceMethod);
         }
     }
+
+    //public class EndChunk : Chunk
+    //{
+    //    public EndChunk(BinaryReader stream) : base(stream) { }
+    //}
 }

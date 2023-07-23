@@ -144,8 +144,19 @@ namespace pnglitch
             //Console.ReadLine();
 
 
+            string path = "lena-011-average-transpose.png";//"River_Side1_roads.png";//image
 
-            string path = "image.png";
+            Console.WriteLine("-----------------------");
+            Png file = new Png();
+            file.Load(path);
+            foreach (Chunk c in file.Chunks)
+            {
+                c.Dump();
+            }
+
+            Console.ReadLine();
+
+
             PNG image = new PNG();
             PNGHeader header = new PNGHeader();
 
@@ -357,7 +368,7 @@ namespace pnglitch
 
                 }
 
-                
+
                 //Crc32 crc = new Crc32();
                 //using (MemoryStream destination = new MemoryStream())
                 //using (MemoryStream d = new MemoryStream())
@@ -413,7 +424,7 @@ namespace pnglitch
                 //}
 
 
-                Console.ReadLine();
+
             }
 
 
