@@ -57,13 +57,22 @@ namespace pnglitch
     }
 
 
-    internal enum ScanlineFilter : byte
+    internal enum FilterType : byte
     {
         None,
         Sub,
         Up,
         Average,
-        Perth
+        Paeth
+    }
+
+    internal enum ColorType : byte
+    {
+        Indexed,
+        Grayscale,
+        GrascaleAndAlpha,
+        Truecolor,
+        TruecolorAndAlpha
     }
 
     internal class ImageData
@@ -71,8 +80,9 @@ namespace pnglitch
         public byte[] FilteredData;
         public byte[] CompressedData;
         public Scanline[] Scanlines;
-        public ScanlineFilter[] ScanlineFilters;
+        public FilterType[] ScanlineFilters;
         public uint SampleSize;
+        public ColorType ColorType;
 
         private bool _loaded = false;
         private bool _dirty = false;
@@ -168,20 +178,26 @@ namespace pnglitch
 
     internal class Scanline
     {
-        public byte FilterType;
+        public FilterType FilterType;
         public byte[] FilteredData;
+        public byte[] RawData;
         //public byte[] RawData;
 
-        
-        PixelData[] Pixels;
+
+        private bool _requiresFiltering = false;
+
+        //PixelData[] Pixels;
     }
 
 
 
-    //internal struct PixelData
-    //{
-    //    byte[]
-    //}
+    internal struct PixelData
+    {
+
+    }
+
+
+
 
     internal class FileSignature
     {
